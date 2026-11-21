@@ -7,27 +7,37 @@
 <style>
   :root {
     --bg: #f4f5f7; --panel: #ffffff; --ink: #16202b; --muted: #5b6876; --line: #d9dee4;
-    --accent: #0b5cad; --accent-ink: #ffffff;
+    --accent: #d2232a; --accent-ink: #ffffff;
     --ok: #1c7c3c; --ok-bg: #e3f4e8; --bad: #b3261e; --bad-bg: #fbe4e2;
     --warn: #8a5a00; --warn-bg: #fdf0d0; --info: #3d4f63; --info-bg: #e6ebf1;
+    --plot-bg: #ffffff; --plot-ink: #1d2733; --plot-line: #c9d0d8;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #12171d; --panel: #1b222b; --ink: #e8edf2; --muted: #9aa7b5; --line: #323d4a;
-      --accent: #5aa7f2; --accent-ink: #0c1218;
+      --accent: #ef4a50; --accent-ink: #ffffff;
       --ok: #7fd49a; --ok-bg: #173323; --bad: #ff9a92; --bad-bg: #40201e;
       --warn: #f2c66b; --warn-bg: #3b2f12; --info: #b9c6d4; --info-bg: #27313d;
+      --plot-bg: #eef1f4; --plot-ink: #1d2733; --plot-line: #b7c0ca;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink);
          font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 60px; }
-  h1 { font-size: 24px; margin: 0 0 4px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 0 16px 60px; }
+
+  header.hero { margin: 16px 0 22px; border-radius: 14px; overflow: hidden; display: grid;
+                grid-template-columns: 1fr minmax(220px, 34%); background: #17120e; min-height: 250px; }
+  .hero-in { padding: 26px 28px; color: #fff; align-self: center; }
+  .hero-in img { height: 46px; background: #fff; border-radius: 8px; padding: 5px 10px; display: block; margin-bottom: 16px; }
+  .hero-in h1 { font-size: 27px; line-height: 1.2; margin: 0 0 8px; text-wrap: balance; }
+  .hero-in p { margin: 0; color: #e3dcd4; font-size: 14.5px; max-width: 56ch; }
+  .hero-foto { width: 100%; height: 100%; max-height: 300px; object-fit: cover; object-position: center 78%; display: block; }
+  @media (max-width: 720px) { header.hero { grid-template-columns: 1fr; } .hero-foto { max-height: 170px; order: -1; } }
+
   h2 { font-size: 17px; margin: 28px 0 10px; }
-  p.lead { color: var(--muted); margin: 0 0 20px; max-width: 70ch; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } .hero-in h1 { font-size: 22px; } }
   .drop { background: var(--panel); border: 2px dashed var(--line); border-radius: 10px; padding: 18px;
           cursor: pointer; display: block; min-height: 118px; }
   .drop.over { border-color: var(--accent); }
@@ -51,28 +61,53 @@
   .card .n { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .card .l { color: var(--muted); font-size: 12.5px; }
   ul.avisos { margin: 0; padding: 12px 16px 12px 32px; background: var(--warn-bg); color: var(--warn); border-radius: 10px; }
+  ul.avisos li.dev { color: var(--bad); font-weight: 600; }
   .wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
   table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
   th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
-  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 600; font-size: 12.5px; }
+  th { background: var(--panel); color: var(--muted); font-weight: 600; font-size: 12.5px; }
   td.det { white-space: normal; min-width: 260px; }
-  td.num { text-align: right; }
+  td.num, th.num { text-align: right; }
   .pill { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
   .pill.OK { background: var(--ok-bg); color: var(--ok); }
   .pill.DIF { background: var(--bad-bg); color: var(--bad); }
   .pill.REV { background: var(--warn-bg); color: var(--warn); }
   .pill.INF { background: var(--info-bg); color: var(--info); }
-  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); vertical-align: -1px; margin-right: 6px; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid #55606c; vertical-align: -1px; margin-right: 6px; }
   .filters { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted); font-size: 14px; }
-  footer { color: var(--muted); font-size: 12.5px; margin-top: 30px; max-width: 80ch; }
+
+  .plot { position: relative; background: var(--plot-bg); border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+  .plot svg { display: block; width: 100%; height: auto; max-height: 78vh; touch-action: manipulation; }
+  .plot text { font: 9px system-ui, sans-serif; fill: var(--plot-ink); pointer-events: none; }
+  .plot .hole { cursor: pointer; }
+  .legend { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 8px 2px 0; }
+  .legend .ring { display: inline-block; width: 13px; height: 13px; border-radius: 50%; vertical-align: -2px; margin-right: 6px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; color: var(--muted); align-items: center; }
+  .chip { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 1px 10px; cursor: default; }
+  #tip { position: fixed; z-index: 20; pointer-events: none; background: #141b23; color: #f1f4f7; border-radius: 10px;
+         padding: 10px 12px; font-size: 13px; line-height: 1.4; max-width: 380px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+  #tip h4 { margin: 0 0 6px; font-size: 14px; }
+  #tip table { font-size: 12.5px; width: auto; }
+  #tip th, #tip td { border: 0; padding: 1px 10px 1px 0; background: none; color: inherit; }
+  #tip th { color: #a9b6c3; font-weight: 600; }
+  #tip td.x { color: #ff9a92; font-weight: 700; }
+  #tip .d { margin-top: 6px; color: #ffb4ad; }
+  #tip .g { color: #8fe0aa; font-weight: 600; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 30px; max-width: 86ch; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Revisión OT de carguío vs Charge Sheet</h1>
-  <p class="lead">Sube la OT de carguío (PDF) y la Charge Sheet de BlastLogic (PDF) de la misma malla.
-    La revisión se hace dentro de tu navegador: los archivos no se envían a ningún servidor.</p>
+  <header class="hero">
+    <div class="hero-in">
+      <img src="enaex-logo.png" alt="Enaex">
+      <h1>Revisión OT de carguío vs Charge Sheet</h1>
+      <p>Sube la OT de carguío y la Charge Sheet de BlastLogic de la misma malla. La revisión se hace dentro de tu
+        navegador: los archivos no se envían a ningún servidor.</p>
+    </div>
+    <img class="hero-foto" src="enaex-foto.jpg" alt="Camión de Enaex y operador al atardecer">
+  </header>
 
   <div class="grid">
     <label class="drop" id="dropOT">
@@ -98,10 +133,18 @@
     <div class="verdict" id="veredicto"></div>
     <div class="cards" id="tarjetas"></div>
 
+    <h2>Totales de la malla</h2>
+    <div class="wrap"><table id="tTotales"></table></div>
+
     <div id="avisosBox" hidden>
-      <h2>Avisos para revisión manual</h2>
+      <h2>Desviaciones y avisos</h2>
       <ul class="avisos" id="avisos"></ul>
     </div>
+
+    <h2>Distribución de pozos</h2>
+    <div class="plot" id="plot"></div>
+    <div class="legend" id="leyenda"></div>
+    <div class="chips" id="sinPlano" hidden></div>
 
     <h2>Perfiles de carga leídos en la OT</h2>
     <div class="wrap"><table id="tCuadros"></table></div>
@@ -114,24 +157,28 @@
     <div class="wrap"><table id="tFilas"></table></div>
   </section>
 
-  <footer>
-    Herramienta de apoyo: compara taco, taco de aire, tipo de explosivo y kg/m planificados. Tolerancias: taco y aire ±0,05 m;
-    densidad lineal ±10 %. No reemplaza la revisión del ingeniero: las notas de texto de la OT (por ejemplo "usar taco recomendado")
-    y las tablas de ajuste no se interpretan y se listan como avisos. Las mallas de precorte (‑9xx) no están consideradas.
+  <footer id="pie">
+    Herramienta de apoyo: compara taco, taco de aire, tipo de explosivo y kg/m planificados, además del número de pozos y los
+    kg totales de explosivo. Tolerancias: taco y taco de aire ±0,3 m; densidad lineal ±5 %; kg totales ±5 %.
+    No reemplaza la revisión del ingeniero: las notas de texto de la OT (por ejemplo "usar taco recomendado") y las tablas de
+    ajuste no se interpretan y se listan como avisos. Las mallas de precorte (‑9xx) no están consideradas.
   </footer>
 </main>
+<div id="tip" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.28.3/full/pyodide.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const estado = $("estado"), btn = $("btn");
-let py = null, archivos = { ot: null, cs: [] }, ultimo = null;
+const estado = $("estado"), btn = $("btn"), tip = $("tip");
+const SVG = "http://www.w3.org/2000/svg";
+let py = null, archivos = { ot: null, cs: [] }, ultimo = null, porPozo = {};
 
 const ETIQ = {
   "OK": ["OK", "Coincide"], "DIFERENCIA": ["DIF", "Diferencia"], "REVISAR": ["REV", "Revisar"],
   "SOLO EN OT": ["REV", "Solo en OT"], "SOLO EN CHARGE SHEET": ["REV", "Solo en Charge Sheet"],
   "SIN PLAN EN CS": ["INF", "Sin plan en CS"], "CS SIN EXPLOSIVO": ["DIF", "CS sin explosivo"],
 };
+const ANILLO = { DIF: "#d2232a", REV: "#e08a00", INF: "#7b8794" };
 const COLS = [
   ["pozo", "Pozo"], ["estado", "Estado"], ["detalle", "Detalle"], ["grupo_OT", "Perfil OT"],
   ["aumento_OT", "Aumento taco"], ["taco_OT", "Taco OT"], ["taco_CS", "Taco CS"],
@@ -139,11 +186,18 @@ const COLS = [
   ["kgm_OT", "kg/m OT"], ["kgm_CS", "kg/m CS"], ["kg_CS", "kg CS"], ["prof_CS", "Prof. CS"],
 ];
 const NUM = new Set(["aumento_OT", "taco_OT", "taco_CS", "aire_OT", "aire_CS", "kgm_OT", "kgm_CS", "kg_CS", "prof_CS"]);
+const miles = n => n == null || n === "" ? "—" : Number(n).toLocaleString("es-CL", { maximumFractionDigits: 1 });
+const v = (x, u = "") => x == null || x === "" ? "—" : `${x}${u}`;
 
 function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) k === "class" ? e.className = v : e.setAttribute(k, v);
+  for (const [k, val] of Object.entries(attrs)) k === "class" ? e.className = val : e.setAttribute(k, val);
   for (const k of kids) e.append(k);
+  return e;
+}
+function sv(tag, attrs = {}) {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, val] of Object.entries(attrs)) e.setAttribute(k, val);
   return e;
 }
 function refrescar() {
@@ -207,25 +261,49 @@ async function comparar() {
 }
 
 function pintar(r) {
-  const c = r.conteo, total = r.filas.length, ok = c["OK"] || 0;
+  const c = r.conteo, t = r.totales, total = r.filas.length, ok = c["OK"] || 0;
+  porPozo = Object.fromEntries(r.filas.map(f => [f.pozo, f]));
   const malos = total - ok - (c["SIN PLAN EN CS"] || 0);
-  const v = $("veredicto");
-  v.className = "verdict " + (malos === 0 ? "ok" : "bad");
-  v.textContent = malos === 0
-    ? `Malla ${r.malla}: no se encontraron diferencias entre la OT y la Charge Sheet.`
-    : `Malla ${r.malla}: ${malos} pozo(s) no coinciden o requieren revisión.`;
-  v.append(el("small", {}, `OT página ${r.pagina_ot} · Charge Sheet ${r.charge_sheets.join(", ")} · ${total} pozos`));
+  const desvTot = (t.ok_pozos === false ? 1 : 0) + (t.ok_kg === false ? 1 : 0);
+  const ver = $("veredicto");
+  ver.className = "verdict " + (malos === 0 && desvTot === 0 ? "ok" : "bad");
+  const partes = [];
+  if (malos) partes.push(`${malos} pozo(s) no coinciden o requieren revisión`);
+  if (t.ok_pozos === false) partes.push("el número de pozos no coincide");
+  if (t.ok_kg === false) partes.push("los kg totales de explosivo no coinciden");
+  ver.textContent = partes.length
+    ? `Malla ${r.malla}: ${partes.join("; ")}.`
+    : `Malla ${r.malla}: no se encontraron diferencias entre la OT y la Charge Sheet.`;
+  ver.append(el("small", {}, `OT página ${r.pagina_ot} · Charge Sheet ${r.charge_sheets.join(", ")} · ${total} pozos`));
 
-  const t = $("tarjetas"); t.replaceChildren();
+  const tj = $("tarjetas"); tj.replaceChildren();
   for (const [k, n] of Object.entries(c).sort((a, b) => b[1] - a[1]))
-    t.append(el("div", { class: "card" }, el("div", { class: "n" }, String(n)), el("div", { class: "l" }, (ETIQ[k] || ["", k])[1])));
+    tj.append(el("div", { class: "card" }, el("div", { class: "n" }, String(n)), el("div", { class: "l" }, (ETIQ[k] || ["", k])[1])));
 
+  // totales
+  const tt = $("tTotales"); tt.replaceChildren();
+  const pill = ok_ => ok_ == null ? el("span", { class: "pill REV" }, "No leído")
+    : el("span", { class: "pill " + (ok_ ? "OK" : "DIF") }, ok_ ? "Coincide" : "Desviación");
+  tt.append(el("tr", {}, ...["Concepto", "OT (tabla superior)", "Charge Sheet", "Diferencia", "Estado"]
+    .map((h, i) => el("th", { class: i > 0 && i < 4 ? "num" : "" }, h))));
+  const dPozos = t.pozos_OT_tabla == null ? "—" : String(t.pozos_CS - t.pozos_OT_tabla);
+  tt.append(el("tr", {}, el("td", {}, "N° de pozos"), el("td", { class: "num" }, miles(t.pozos_OT_tabla)),
+    el("td", { class: "num" }, `${miles(t.pozos_CS)} (${t.pozos_CS_con_plan} con plan de carga)`),
+    el("td", { class: "num" }, dPozos), el("td", {}, pill(t.ok_pozos))));
+  tt.append(el("tr", {}, el("td", {}, "Explosivo total (kg)"), el("td", { class: "num" }, miles(t.kg_OT)),
+    el("td", { class: "num" }, miles(t.kg_CS)),
+    el("td", { class: "num" }, t.dif_kg_pct == null ? "—" : `${t.dif_kg_pct > 0 ? "+" : ""}${miles(t.dif_kg_pct)} %`),
+    el("td", {}, pill(t.ok_kg))));
+
+  // avisos
   const a = $("avisos"); a.replaceChildren();
   const zonas = r.zonas_aumento.map(z => `+${z[0]} m a ${z[1]} pozos`).join("; ");
   const lista = [...r.avisos];
-  if (zonas) lista.unshift("Zonas de aumento de taco aplicadas: " + zonas + ".");
-  for (const x of lista) a.append(el("li", {}, x));
+  if (zonas) lista.push("Zonas de aumento de taco aplicadas: " + zonas + ".");
+  for (const x of lista) a.append(el("li", { class: /^(DESVIACIÓN|ATENCIÓN)/.test(x) ? "dev" : "" }, x));
   $("avisosBox").hidden = lista.length === 0;
+
+  pintarPlano(r);
 
   const tc = $("tCuadros"); tc.replaceChildren();
   tc.append(el("tr", {}, ...["Perfil", "N° pozos", "Largo pozo", "Taco", "Aire", "Explosivo", "kg"].map(h => el("th", {}, h))));
@@ -237,6 +315,120 @@ function pintar(r) {
   pintarFilas();
   $("res").hidden = false;
 }
+
+/* ---------- gráfico XY de pozos ---------- */
+function pintarPlano(r) {
+  const cont = $("plot"); cont.replaceChildren();
+  const pz = r.plano.pozos;
+  if (!pz.length) { cont.append(el("p", { style: "color:#55606c;margin:10px" }, "No se identificaron pozos en el plano de la OT.")); return; }
+  const xs = pz.map(p => p.x), ys = pz.map(p => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const pad = Math.max(x1 - x0, y1 - y0) * 0.06 + 14;
+  const W = x1 - x0 + 2 * pad, H = y1 - y0 + 2 * pad;
+  // radio según la separación típica entre pozos
+  let dmin = [];
+  for (const p of pz) { let d = Infinity; for (const q of pz) if (q !== p) d = Math.min(d, Math.hypot(p.x - q.x, p.y - q.y)); if (isFinite(d)) dmin.push(d); }
+  dmin.sort((a, b) => a - b);
+  const sep = dmin.length ? dmin[Math.floor(dmin.length / 2)] : 20;
+  const rad = Math.max(2.2, Math.min(7, sep * 0.2));
+  const svg = sv("svg", { viewBox: `${x0 - pad} ${y0 - pad} ${W} ${H}`, role: "img", "aria-label": "Distribución de pozos de la OT" });
+  svg.style.aspectRatio = `${W} / ${H}`;
+  for (const z of r.plano.zonas) {
+    svg.append(sv("polygon", { points: z.pts.map(p => p.join(",")).join(" "), fill: z.color, "fill-opacity": ".07",
+      stroke: z.color, "stroke-width": rad * 0.3, "stroke-dasharray": z.delta == null ? `${rad} ${rad}` : "none" }));
+  }
+  for (const p of pz) {
+    const f = porPozo[p.pozo] || { estado: "REVISAR" };
+    const clase = (ETIQ[f.estado] || ["REV"])[0];
+    const g = sv("g", { class: "hole", tabindex: "0" });
+    if (clase !== "OK") g.append(sv("circle", { cx: p.x, cy: p.y, r: rad * 1.9, fill: "none", stroke: ANILLO[clase],
+      "stroke-width": rad * 0.55, "stroke-dasharray": clase === "INF" ? `${rad * .8} ${rad * .6}` : "none" }));
+    g.append(sv("circle", { cx: p.x, cy: p.y, r: rad, fill: p.color, stroke: "#39424d", "stroke-width": rad * 0.14 }));
+    g.append(sv("circle", { cx: p.x, cy: p.y, r: rad * 2.4, fill: "transparent" }));   // zona sensible al mouse
+    const tx = sv("text", { x: p.x, y: p.y - rad * 1.5, "text-anchor": "middle", "font-size": Math.max(4, rad * 1.5) });
+    tx.textContent = p.pozo; g.append(tx);
+    const mostrar = e => mostrarTip(p.pozo, e);
+    g.addEventListener("mousemove", mostrar); g.addEventListener("mouseenter", mostrar);
+    g.addEventListener("mouseleave", ocultarTip);
+    g.addEventListener("focus", () => { const b = g.getBoundingClientRect(); mostrarTip(p.pozo, { clientX: b.right, clientY: b.top }); });
+    g.addEventListener("blur", ocultarTip);
+    g.addEventListener("click", e => { e.stopPropagation(); mostrar(e); });
+    svg.append(g);
+  }
+  cont.append(svg);
+
+  const lg = $("leyenda"); lg.replaceChildren();
+  for (const b of r.cuadros) lg.append(el("span", {}, el("span", { class: "sw", style: `background:${b.color}` }), b.nombre));
+  for (const [k, txt] of [["DIF", "Diferencia"], ["REV", "Revisar / solo en un documento"], ["INF", "Sin plan en CS"]])
+    lg.append(el("span", {}, el("span", { class: "ring", style: `border:3px ${k === "INF" ? "dashed" : "solid"} ${ANILLO[k]}` }), txt));
+  for (const z of r.plano.zonas.filter((z, i, arr) => arr.findIndex(o => o.color === z.color && o.delta === z.delta) === i))
+    lg.append(el("span", {}, el("span", { class: "ring", style: `border:2px solid ${z.color};border-radius:3px` }),
+      z.delta == null ? "Zona sin leyenda" : `Aumentar taco ${z.delta} m`));
+
+  const enPlano = new Set(pz.map(p => p.pozo));
+  const fuera = r.filas.filter(f => !enPlano.has(f.pozo));
+  const sp = $("sinPlano"); sp.replaceChildren(); sp.hidden = fuera.length === 0;
+  if (fuera.length) {
+    sp.append("Pozos de la Charge Sheet que no están en el plano de la OT:");
+    for (const f of fuera) {
+      const ch = el("span", { class: "chip", tabindex: "0" }, f.pozo);
+      ch.addEventListener("mousemove", e => mostrarTip(f.pozo, e));
+      ch.addEventListener("mouseleave", ocultarTip);
+      sp.append(ch);
+    }
+  }
+}
+
+function fila2(nombre, a, b, forzar) {
+  const dif = forzar === undefined ? String(a) !== String(b) : forzar;
+  return el("tr", {}, el("th", {}, nombre), el("td", {}, a), el("td", { class: dif ? "x" : "" }, b));
+}
+function mostrarTip(pozo, e) {
+  const f = porPozo[pozo]; if (!f) return;
+  tip.replaceChildren(el("h4", {}, `Pozo ${f.pozo}` + (f.grupo_OT ? ` · ${f.grupo_OT.replace(/^\d+\.\s*/, "")}` : "")));
+  const aum = f.aumento_OT ? ` (incluye +${f.aumento_OT} m)` : "";
+  if (f.estado === "OK") {
+    tip.append(el("div", { class: "g" }, "OT y Charge Sheet coinciden"));
+    const t = el("table");
+    t.append(el("tr", {}, el("th", {}, "Taco"), el("td", {}, v(f.taco_CS, " m") + aum)));
+    if (Number(f.aire_CS) > 0 || Number(f.aire_OT) > 0) t.append(el("tr", {}, el("th", {}, "Taco de aire"), el("td", {}, v(f.aire_CS, " m"))));
+    t.append(el("tr", {}, el("th", {}, "Explosivo"), el("td", {}, v(f.explosivo_CS))));
+    t.append(el("tr", {}, el("th", {}, "Carga"), el("td", {}, `${v(f.kg_CS, " kg")} · ${v(f.kgm_CS, " kg/m")}`)));
+    t.append(el("tr", {}, el("th", {}, "Profundidad"), el("td", {}, v(f.prof_CS, " m"))));
+    tip.append(t);
+  } else if (f.estado === "SOLO EN OT" || f.estado === "SOLO EN CHARGE SHEET") {
+    const enOT = f.estado === "SOLO EN OT";
+    tip.append(el("div", { class: "d" }, enOT ? "Está en la OT pero no en la Charge Sheet" : "Está en la Charge Sheet pero no en el plano de la OT"));
+    const t = el("table"), s = enOT ? "OT" : "CS";
+    t.append(el("tr", {}, el("th", {}, "Taco"), el("td", {}, v(f["taco_" + s], " m"))));
+    t.append(el("tr", {}, el("th", {}, "Taco de aire"), el("td", {}, v(f["aire_" + s], " m"))));
+    t.append(el("tr", {}, el("th", {}, "Explosivo"), el("td", {}, v(f["explosivo_" + s]))));
+    if (!enOT) t.append(el("tr", {}, el("th", {}, "Carga"), el("td", {}, v(f.kg_CS, " kg"))));
+    tip.append(t);
+  } else {
+    const t = el("table");
+    t.append(el("tr", {}, el("th", {}, ""), el("th", {}, "OT"), el("th", {}, "Charge Sheet")));
+    const d = f.detalle || "", comp = f.estado === "DIFERENCIA";
+    t.append(fila2("Taco", v(f.taco_OT, " m"), v(f.taco_CS, " m"), comp ? /taco OT/.test(d) : undefined));
+    t.append(fila2("Taco de aire", v(f.aire_OT, " m"), v(f.aire_CS, " m"), comp ? /aire OT/.test(d) : undefined));
+    t.append(fila2("Explosivo", v(f.explosivo_OT), v(f.explosivo_CS)));
+    t.append(fila2("kg/m", v(f.kgm_OT), v(f.kgm_CS), /kg\/m OT/.test(d)));
+    t.append(el("tr", {}, el("th", {}, "Carga"), el("td", {}, v(f.kg_OT_nominal, " kg (nominal)")), el("td", {}, v(f.kg_CS, " kg"))));
+    t.append(el("tr", {}, el("th", {}, "Profundidad"), el("td", {}, "—"), el("td", {}, v(f.prof_CS, " m"))));
+    tip.append(t);
+    tip.append(el("div", { class: "d" }, `${(ETIQ[f.estado] || ["", f.estado])[1]}${f.detalle ? ": " + f.detalle : ""}`));
+    if (f.aumento_OT) tip.append(el("div", {}, `Taco OT incluye aumento de +${f.aumento_OT} m`));
+  }
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + 16, y = e.clientY + 16;
+  if (x + w > innerWidth - 8) x = Math.max(8, e.clientX - w - 16);
+  if (y + h > innerHeight - 8) y = Math.max(8, e.clientY - h - 16);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function ocultarTip() { tip.hidden = true; }
+document.addEventListener("click", ocultarTip);
+window.addEventListener("scroll", ocultarTip, { passive: true });
 
 function pintarFilas() {
   if (!ultimo) return;
@@ -257,8 +449,11 @@ function pintarFilas() {
 
 function descargarCsv() {
   if (!ultimo) return;
-  const cols = ultimo.columnas, q = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-  const txt = [cols.join(";"), ...ultimo.filas.map(f => cols.map(c => q(f[c])).join(";"))].join("\r\n");
+  const cols = ultimo.columnas, q = x => `"${String(x == null ? "" : x).replace(/"/g, '""')}"`;
+  const t = ultimo.totales;
+  const cab = [`"Malla";${q(ultimo.malla)}`, `"Pozos OT";${q(t.pozos_OT_tabla)};"Pozos CS";${q(t.pozos_CS)}`,
+               `"kg OT";${q(t.kg_OT)};"kg CS";${q(t.kg_CS)};"Dif %";${q(t.dif_kg_pct)}`, ""];
+  const txt = [...cab, cols.join(";"), ...ultimo.filas.map(f => cols.map(c => q(f[c])).join(";"))].join("\r\n");
   const a = el("a", { href: URL.createObjectURL(new Blob(["﻿" + txt], { type: "text/csv" })), download: `comparacion_${ultimo.malla}.csv` });
   document.body.append(a); a.click(); a.remove();
 }

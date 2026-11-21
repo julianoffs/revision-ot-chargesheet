@@ -20,9 +20,10 @@ try:
 except ImportError:  # versiones antiguas
     import fitz
 
-TOL_TACO = 0.05   # m
-TOL_AIRE = 0.05   # m
-TOL_KGM = 0.10    # 10 % en densidad lineal (kg/m)
+TOL_TACO = 0.30   # m
+TOL_AIRE = 0.30   # m (taco intermedio de aire)
+TOL_KGM = 0.05    # 5 % en densidad lineal (kg/m)
+TOL_KG_TOTAL = 0.05   # 5 % en kg totales de explosivo de la malla
 
 HOLE_RE = re.compile(r"^\d{2,4}[A-Z]{0,2}$")
 
@@ -66,6 +67,12 @@ def parse_charge_sheet(path):
     meta["charge_sheet"] = m.group(1) if m else "?"
     m = re.search(r"\b((?:DON|INF)\d+[-‑]\d+[-‑]\d+)", t0)
     meta["malla"] = m.group(1).replace("‑", "-") if m else "?"
+    m = re.search(r"Holes in sheet:\s*(\d+)", t0)
+    meta["pozos_hoja"] = int(m.group(1)) if m else None
+    m = re.search(r"Holes charged:\s*(\d+)", t0)
+    meta["pozos_cargados"] = int(m.group(1)) if m else None
+    m = re.search(r"Total bulk explosives\s+(\d+)\s+[\d.,]+m\s+([\d,]+)kg", t0)
+    meta["kg_total_hoja"] = num(m.group(2)) if m else None
     cur = None
     for pg in doc:
         words = pg.get_text("words")
@@ -267,9 +274,25 @@ def parse_ot(path):
     txt = pg.get_text()
     m = re.search(r"\b((?:DON|INF)\d+-\d+-\d+)", txt)
     meta = {"archivo": os.path.basename(path), "malla": m.group(1) if m else "?", "pagina": pg.number + 1, "avisos": []}
-    m = re.search(r"N° Pozos Total", txt)
     drawings = pg.get_drawings()
     W = pg.rect.width
+    todas = pg.get_text("words")
+
+    def _valor(etiqueta):
+        """Número a la derecha de una etiqueta de la tabla resumen de la OT."""
+        rs = pg.search_for(etiqueta)
+        if not rs:
+            return None
+        r = rs[0]
+        yc = (r.y0 + r.y1) / 2
+        cand = [w for w in todas if w[0] > r.x1 and w[0] - r.x1 < 0.2 * W
+                and abs((w[1] + w[3]) / 2 - yc) < (r.y1 - r.y0) * 0.6 and re.fullmatch(r"[\d.,]+", w[4])]
+        return num(min(cand, key=lambda w: w[0])[4]) if cand else None
+
+    meta["resumen"] = {"n_pozos": _valor("Pozos Total"), "kg_explosivo": _valor("Consumo de explosivo"),
+                       "gravilla_ton": _valor("Consumo de Gravilla"), "tonelaje": _valor("Tonaleje"),
+                       "fc": _valor("FC Global")}
+    meta["pagina_wh"] = (pg.rect.width, pg.rect.height)
 
     # 1) cuadros de perfil: rectángulos grandes de borde grueso y color
     boxes = []
@@ -336,6 +359,7 @@ def parse_ot(path):
         if not L.get("usada") and not (len(libres) == 1 and len(colores_h) == 1):
             meta["avisos"].append(f"Leyenda 'AUMENTAR TACO {L['delta']} m' sin polígono del mismo color (revisar).")
     meta["zonas_sin_leyenda"] = huerf
+    meta["poligonos"] = [{"pts": p["pts"], "delta": p["delta"], "color": p["color"]} for p in polys + huerf]
     for mm in re.finditer(r"(USAR TACO RECOMENDADO|(?<!AUMENTAR )TACO\s+\d+(?:[.,]\d+)?\s*M\b|SIN AJUSTE DE TACO[^\n]*)", txt, re.I):
         meta["avisos"].append("Nota en la OT: '" + mm.group(1).strip() + "' (revisar manualmente)")
 
@@ -455,9 +479,9 @@ def compare(ot_holes, cs_holes):
             r["estado"] = "REVISAR"
             r["detalle"] = "no se pudo leer el taco en " + ("la OT" if o["taco"] is None else "la charge sheet")
         else:
-            if abs(o["taco"] - c["taco"]) > TOL_TACO:
+            if round(abs(o["taco"] - c["taco"]), 2) > TOL_TACO:
                 prob.append(f"taco OT {o['taco']} vs CS {c['taco']}")
-            if abs((o["aire"] or 0) - (c["aire"] or 0)) > TOL_AIRE:
+            if round(abs((o["aire"] or 0) - (c["aire"] or 0)), 2) > TOL_AIRE:
                 prob.append(f"aire OT {o['aire']} vs CS {c['aire']}")
             if o["explosivo"] != c["explosivo"]:
                 prob.append(f"explosivo OT {o['explosivo']} vs CS {c['explosivo']}")
@@ -497,6 +521,34 @@ def run_pair(ot_path, cs_paths, out_csv=None):
     cnt = {}
     for r in rows:
         cnt[r["estado"]] = cnt.get(r["estado"], 0) + 1
+    res = ot_meta.get("resumen", {})
+    kg_cs = round(sum(h["kg"] or 0 for h in cs_holes.values()))
+    tot = {"pozos_OT_tabla": int(res["n_pozos"]) if res.get("n_pozos") is not None else None,
+           "pozos_OT_plano": len(ot_holes), "pozos_CS": len(cs_holes),
+           "pozos_CS_con_plan": sum(1 for h in cs_holes.values() if not h["sin_plan"]),
+           "kg_OT": res.get("kg_explosivo"), "kg_CS": kg_cs,
+           "kg_CS_hojas": [m_["kg_total_hoja"] for m_ in cs_metas], "dif_kg_pct": None,
+           "ok_pozos": None, "ok_kg": None, "tol_kg_pct": TOL_KG_TOTAL * 100}
+    if tot["pozos_OT_tabla"] is not None:
+        tot["ok_pozos"] = tot["pozos_OT_tabla"] == tot["pozos_CS"]
+        if not tot["ok_pozos"]:
+            ot_meta["avisos"].insert(0, f"DESVIACIÓN: la tabla de la OT indica {tot['pozos_OT_tabla']} pozos y la "
+                                        f"charge sheet tiene {tot['pozos_CS']}.")
+        if tot["pozos_OT_plano"] != tot["pozos_OT_tabla"]:
+            ot_meta["avisos"].append(f"En el plano de la OT se identificaron {tot['pozos_OT_plano']} pozos con etiqueta, "
+                                     f"pero su tabla indica {tot['pozos_OT_tabla']}.")
+    else:
+        ot_meta["avisos"].append("No se pudo leer 'N° Pozos Total' en la tabla de la OT.")
+    if tot["kg_OT"]:
+        tot["dif_kg_pct"] = round((kg_cs - tot["kg_OT"]) / tot["kg_OT"] * 100, 1)
+        tot["ok_kg"] = abs(tot["dif_kg_pct"]) <= TOL_KG_TOTAL * 100
+        if not tot["ok_kg"]:
+            ot_meta["avisos"].insert(0, f"DESVIACIÓN: la OT indica {tot['kg_OT']:,.0f} kg de explosivo y la charge sheet "
+                                        f"planifica {kg_cs:,.0f} kg ({tot['dif_kg_pct']:+.1f} %).".replace(",", "."))
+    else:
+        ot_meta["avisos"].append("No se pudo leer 'Consumo de explosivo (kg)' en la tabla de la OT.")
+    ot_meta["totales"] = tot
+    ot_meta["_ot_holes"] = ot_holes
     return ot_meta, cs_metas, rows, cnt
 
 
@@ -514,7 +566,16 @@ def run_json(ot_path, cs_paths):
                 "kg": (b["kg_inter"] or 0) + (b["kg_fondo"] or 0),
                 "color": "#%02x%02x%02x" % tuple(int(round(v * 255)) for v in b["color"][:3])}
                for b in om["cuadros"]]
-    return json.dumps({"malla": om["malla"], "pagina_ot": om["pagina"],
+    hexc = lambda col: "#%02x%02x%02x" % tuple(int(round(v * 255)) for v in col[:3])
+    plano = {"w": om["pagina_wh"][0], "h": om["pagina_wh"][1],
+             "pozos": [{"pozo": h["pozo"], "x": round(h["xy"][0], 1), "y": round(h["xy"][1], 1), "color": hexc(h["color"])}
+                       for h in om["_ot_holes"].values()],
+             "zonas": [{"pts": [[round(x, 1), round(y, 1)] for x, y in z["pts"]], "delta": z["delta"],
+                        "color": hexc(z["color"])} for z in om["poligonos"]]}
+    return json.dumps({"totales": om["totales"], "plano": plano,
+                       "tolerancias": {"taco": TOL_TACO, "aire": TOL_AIRE, "kgm_pct": TOL_KGM * 100,
+                                       "kg_total_pct": TOL_KG_TOTAL * 100},
+                       "malla": om["malla"], "pagina_ot": om["pagina"],
                        "charge_sheets": [c["charge_sheet"] for c in cm], "cuadros": cuadros,
                        "zonas_aumento": om["zonas_aumento"], "avisos": avisos, "conteo": cnt,
                        "columnas": COLS, "filas": rows}, ensure_ascii=False)
@@ -540,6 +601,9 @@ def main(argv):
             print("   cuadros:", [(b["nombre"], b["n_pozos"], b["taco"], b["aire"], b["expl_fondo"], b["kg_fondo"]) for b in om["cuadros"]])
             print("   zonas aumento (delta, pozos):", om["zonas_aumento"])
             print("   resultado:", cnt)
+            t_ = om["totales"]
+            print(f"   totales: pozos OT {t_['pozos_OT_tabla']} / CS {t_['pozos_CS']} -> {'OK' if t_['ok_pozos'] else 'DESVIACION'};"
+                  f" kg OT {t_['kg_OT']} / CS {t_['kg_CS']} ({t_['dif_kg_pct']} %) -> {'OK' if t_['ok_kg'] else 'DESVIACION'}")
             for a in om["avisos"]:
                 print("   aviso:", a)
             for r in rows:
