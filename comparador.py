@@ -24,7 +24,6 @@ except ImportError:  # versiones antiguas
 # (Las tolerancias de 0,3 m / 5 % son para revisiones post-tronadura, no para esta comparación.)
 TOL_TACO = 0.0        # m
 TOL_AIRE = 0.0        # m (taco intermedio de aire)
-TOL_KG_TOTAL = 0.0    # kg totales de explosivo de la malla
 
 HOLE_RE = re.compile(r"^\d{2,4}[A-Z]{0,2}$")
 
@@ -540,12 +539,9 @@ def run_pair(ot_path, cs_paths, out_csv=None):
     else:
         ot_meta["avisos"].append("No se pudo leer 'N° Pozos Total' en la tabla de la OT.")
     if tot["kg_OT"]:
-        tot["dif_kg_pct"] = round((kg_cs - tot["kg_OT"]) / tot["kg_OT"] * 100, 1)
+        tot["dif_kg_pct"] = round((kg_cs - tot["kg_OT"]) / tot["kg_OT"] * 100, 1) + 0.0   # evita -0.0
         tot["dif_kg"] = round(kg_cs - tot["kg_OT"])
-        tot["ok_kg"] = abs(tot["dif_kg"]) <= TOL_KG_TOTAL
-        if not tot["ok_kg"]:
-            ot_meta["avisos"].insert(0, f"DESVIACIÓN: la OT indica {tot['kg_OT']:,.0f} kg de explosivo y la charge sheet "
-                                        f"planifica {kg_cs:,.0f} kg ({tot['dif_kg_pct']:+.1f} %).".replace(",", "."))
+        # kg totales: solo informativo (se muestra la diferencia, no se alerta)
     else:
         ot_meta["avisos"].append("No se pudo leer 'Consumo de explosivo (kg)' en la tabla de la OT.")
     ot_meta["totales"] = tot
@@ -574,7 +570,7 @@ def run_json(ot_path, cs_paths):
              "zonas": [{"pts": [[round(x, 1), round(y, 1)] for x, y in z["pts"]], "delta": z["delta"],
                         "color": hexc(z["color"])} for z in om["poligonos"]]}
     return json.dumps({"totales": om["totales"], "plano": plano,
-                       "tolerancias": {"taco": TOL_TACO, "aire": TOL_AIRE, "kg_total": TOL_KG_TOTAL},
+                       "tolerancias": {"taco": TOL_TACO, "aire": TOL_AIRE, "umbral_color_kg_total_pct": 3},
                        "malla": om["malla"], "pagina_ot": om["pagina"],
                        "charge_sheets": [c["charge_sheet"] for c in cm], "cuadros": cuadros,
                        "zonas_aumento": om["zonas_aumento"], "avisos": avisos, "conteo": cnt,
@@ -603,7 +599,7 @@ def main(argv):
             print("   resultado:", cnt)
             t_ = om["totales"]
             print(f"   totales: pozos OT {t_['pozos_OT_tabla']} / CS {t_['pozos_CS']} -> {'OK' if t_['ok_pozos'] else 'DESVIACION'};"
-                  f" kg OT {t_['kg_OT']} / CS {t_['kg_CS']} ({t_['dif_kg_pct']} %) -> {'OK' if t_['ok_kg'] else 'DESVIACION'}")
+                  f" kg OT {t_['kg_OT']} / CS {t_['kg_CS']} ({t_['dif_kg_pct']} %, informativo)")
             for a in om["avisos"]:
                 print("   aviso:", a)
             for r in rows:

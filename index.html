@@ -60,6 +60,14 @@
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 132px; }
   .card .n { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .card .l { color: var(--muted); font-size: 12.5px; }
+  .kgbox { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+  @media (max-width: 720px) { .kgbox { grid-template-columns: 1fr; } }
+  .kgbox .card .n { font-size: 22px; }
+  .kgbox .dif { border-width: 2px; }
+  .kgbox .dif .pct { display: inline-block; margin-left: 8px; border-radius: 8px; padding: 1px 9px; font-size: 18px;
+                     font-weight: 700; background: var(--ok-bg); color: var(--ok); }
+  .kgbox .dif.alto { border-color: var(--bad); }
+  .kgbox .dif.alto .pct { background: var(--bad-bg); color: var(--bad); }
   ul.avisos { margin: 0; padding: 12px 16px 12px 32px; background: var(--warn-bg); color: var(--warn); border-radius: 10px; }
   ul.avisos li.dev { color: var(--bad); font-weight: 600; }
   .wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
@@ -136,6 +144,7 @@
 
     <h2>Totales de la malla</h2>
     <div class="wrap"><table id="tTotales"></table></div>
+    <div class="kgbox" id="kgbox"></div>
 
     <div id="avisosBox" hidden>
       <h2>Desviaciones y avisos</h2>
@@ -159,12 +168,13 @@
   </section>
 
   <footer id="pie">
-    Herramienta de apoyo: compara las longitudes fijas de cada pozo (taco y taco de aire) y el tipo de explosivo, además del
-    número de pozos y los kg totales de explosivo. No se aplican tolerancias: esos valores deben ser exactamente iguales en la
-    OT y en la Charge Sheet; cualquier diferencia se alerta. Los kg de cada pozo se muestran solo como referencia, porque
-    dependen del largo real del pozo. No reemplaza la revisión del ingeniero: las notas de texto de la OT (por ejemplo "usar
-    taco recomendado") y las tablas de ajuste no se interpretan y se listan como avisos. Las mallas de precorte (‑9xx) no
-    están consideradas.
+    Herramienta de apoyo: compara las longitudes fijas de cada pozo (taco y taco de aire), el tipo de explosivo y el número
+    de pozos. No se aplican tolerancias: esos valores deben ser exactamente iguales en la OT y en la Charge Sheet; cualquier
+    diferencia se alerta. Los kg totales de explosivo se muestran siempre con su diferencia en kg y en porcentaje, solo como
+    información (el porcentaje cambia de color sobre 3 %); los kg de cada pozo también son solo referencia, porque dependen
+    del largo real del pozo. No reemplaza la revisión del ingeniero: las notas de texto de la OT (por ejemplo "usar taco
+    recomendado") y las tablas de ajuste no se interpretan y se listan como avisos. Las mallas de precorte (‑9xx) no están
+    consideradas.
   </footer>
 </main>
 <div id="tip" hidden></div>
@@ -267,7 +277,7 @@ function pintar(r) {
   const c = r.conteo, t = r.totales, total = r.filas.length, ok = c["OK"] || 0;
   porPozo = Object.fromEntries(r.filas.map(f => [f.pozo, f]));
   const malos = total - ok - (c["SIN PLAN EN CS"] || 0);
-  const desvTot = (t.ok_pozos === false ? 1 : 0) + (t.ok_kg === false ? 1 : 0);
+  const desvTot = t.ok_pozos === false ? 1 : 0;
   const ver = $("veredicto");
   ver.className = "verdict " + (malos === 0 && desvTot === 0 ? "ok" : "bad");
   const partes = [];
@@ -276,7 +286,6 @@ function pintar(r) {
   if (nKg) partes.push(`${nKg} pozo(s) con kg de explosivo distinto`);
   if (nRev) partes.push(`${nRev} pozo(s) a revisar`);
   if (t.ok_pozos === false) partes.push("el número de pozos no coincide");
-  if (t.ok_kg === false) partes.push("los kg totales de explosivo no coinciden");
   ver.textContent = partes.length
     ? `Malla ${r.malla}: ${partes.join("; ")}.`
     : `Malla ${r.malla}: no se encontraron diferencias entre la OT y la Charge Sheet.`;
@@ -296,10 +305,18 @@ function pintar(r) {
   tt.append(el("tr", {}, el("td", {}, "N° de pozos"), el("td", { class: "num" }, miles(t.pozos_OT_tabla)),
     el("td", { class: "num" }, `${miles(t.pozos_CS)} (${t.pozos_CS_con_plan} con plan de carga)`),
     el("td", { class: "num" }, dPozos), el("td", {}, pill(t.ok_pozos))));
-  tt.append(el("tr", {}, el("td", {}, "Explosivo total (kg)"), el("td", { class: "num" }, miles(t.kg_OT)),
-    el("td", { class: "num" }, miles(t.kg_CS)),
-    el("td", { class: "num" }, t.dif_kg == null ? "—" : `${t.dif_kg > 0 ? "+" : ""}${miles(t.dif_kg)} kg (${t.dif_kg_pct > 0 ? "+" : ""}${miles(t.dif_kg_pct)} %)`),
-    el("td", {}, pill(t.ok_kg))));
+  // kg totales: siempre visibles, solo informativos; el % cambia de color sobre 3 %
+  const kb = $("kgbox"); kb.replaceChildren();
+  const tarj = (n, l) => el("div", { class: "card" }, el("div", { class: "n" }, n), el("div", { class: "l" }, l));
+  kb.append(tarj(t.kg_OT == null ? "—" : miles(t.kg_OT) + " kg", "Explosivo total OT (tabla superior)"));
+  kb.append(tarj(miles(t.kg_CS) + " kg", "Explosivo total Charge Sheet (planificado)"));
+  const sg = x => (x > 0 ? "+" : "") + miles(x);
+  const alto = t.dif_kg_pct != null && Math.abs(t.dif_kg_pct) > 3;
+  const dif = el("div", { class: "card dif" + (alto ? " alto" : "") });
+  dif.append(el("div", { class: "n" }, t.dif_kg == null ? "—" : sg(t.dif_kg) + " kg",
+    t.dif_kg_pct == null ? "" : el("span", { class: "pct" }, sg(t.dif_kg_pct) + " %")));
+  dif.append(el("div", { class: "l" }, "Diferencia Charge Sheet − OT" + (alto ? " · supera 3 %" : "")));
+  kb.append(dif);
 
   // avisos
   const a = $("avisos"); a.replaceChildren();
