@@ -24,7 +24,6 @@ except ImportError:  # versiones antiguas
 # (Las tolerancias de 0,3 m / 5 % son para revisiones post-tronadura, no para esta comparación.)
 TOL_TACO = 0.0        # m
 TOL_AIRE = 0.0        # m (taco intermedio de aire)
-TOL_KG = 0.0          # kg de explosivo por pozo
 TOL_KG_TOTAL = 0.0    # kg totales de explosivo de la malla
 
 HOLE_RE = re.compile(r"^\d{2,4}[A-Z]{0,2}$")
@@ -489,10 +488,10 @@ def compare(ot_holes, cs_holes):
                 prob.append(f"explosivo OT {o['explosivo']} vs CS {c['explosivo']}")
             if o["largo_carga"] and c["largo_carga"] and o["kg"] and c["kg"]:   # kg/m: solo informativo
                 r["kgm_OT"], r["kgm_CS"] = round(o["kg"] / o["largo_carga"], 1), round(c["kg"] / c["largo_carga"], 1)
-            if o["kg"] is not None and c["kg"] is not None and abs(round(o["kg"]) - round(c["kg"])) > TOL_KG:
-                prob.append(f"kg OT {o['kg']:.0f} vs CS {c['kg']:.0f}")
+            # los kg por pozo NO se comparan: dependen del largo real del pozo, que en la charge sheet
+            # difiere del largo nominal de la OT. Solo se exigen idénticas las longitudes fijas (taco y aire).
             if prob:
-                r["estado"] = "KG DISTINTO" if all(x.startswith("kg OT") for x in prob) else "DIFERENCIA"
+                r["estado"] = "DIFERENCIA"
                 r["detalle"] = "; ".join(prob)
                 if o.get("zona_sin_leyenda"):
                     r["detalle"] += " (pozo dentro de un polígono de color sin leyenda)"
@@ -575,7 +574,7 @@ def run_json(ot_path, cs_paths):
              "zonas": [{"pts": [[round(x, 1), round(y, 1)] for x, y in z["pts"]], "delta": z["delta"],
                         "color": hexc(z["color"])} for z in om["poligonos"]]}
     return json.dumps({"totales": om["totales"], "plano": plano,
-                       "tolerancias": {"taco": TOL_TACO, "aire": TOL_AIRE, "kg": TOL_KG, "kg_total": TOL_KG_TOTAL},
+                       "tolerancias": {"taco": TOL_TACO, "aire": TOL_AIRE, "kg_total": TOL_KG_TOTAL},
                        "malla": om["malla"], "pagina_ot": om["pagina"],
                        "charge_sheets": [c["charge_sheet"] for c in cm], "cuadros": cuadros,
                        "zonas_aumento": om["zonas_aumento"], "avisos": avisos, "conteo": cnt,
