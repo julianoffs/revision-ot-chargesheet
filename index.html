@@ -73,6 +73,7 @@
   .pill.DIF { background: var(--bad-bg); color: var(--bad); }
   .pill.REV { background: var(--warn-bg); color: var(--warn); }
   .pill.INF { background: var(--info-bg); color: var(--info); }
+  .pill.KG { background: var(--warn-bg); color: var(--warn); }
   .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid #55606c; vertical-align: -1px; margin-right: 6px; }
   .filters { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted); font-size: 14px; }
 
@@ -158,10 +159,11 @@
   </section>
 
   <footer id="pie">
-    Herramienta de apoyo: compara taco, taco de aire, tipo de explosivo y kg/m planificados, además del número de pozos y los
-    kg totales de explosivo. Tolerancias: taco y taco de aire ±0,3 m; densidad lineal ±5 %; kg totales ±5 %.
-    No reemplaza la revisión del ingeniero: las notas de texto de la OT (por ejemplo "usar taco recomendado") y las tablas de
-    ajuste no se interpretan y se listan como avisos. Las mallas de precorte (‑9xx) no están consideradas.
+    Herramienta de apoyo: compara taco, taco de aire, tipo de explosivo y kg de explosivo de cada pozo, además del número de
+    pozos y los kg totales de explosivo. No se aplican tolerancias: los valores de la OT y de la Charge Sheet deben ser
+    exactamente iguales; cualquier diferencia se alerta. No reemplaza la revisión del ingeniero: las notas de texto de la OT
+    (por ejemplo "usar taco recomendado") y las tablas de ajuste no se interpretan y se listan como avisos. Las mallas de
+    precorte (‑9xx) no están consideradas.
   </footer>
 </main>
 <div id="tip" hidden></div>
@@ -174,18 +176,18 @@ const SVG = "http://www.w3.org/2000/svg";
 let py = null, archivos = { ot: null, cs: [] }, ultimo = null, porPozo = {};
 
 const ETIQ = {
-  "OK": ["OK", "Coincide"], "DIFERENCIA": ["DIF", "Diferencia"], "REVISAR": ["REV", "Revisar"],
+  "OK": ["OK", "Coincide"], "DIFERENCIA": ["DIF", "Taco / explosivo distinto"], "KG DISTINTO": ["KG", "Solo kg distinto"], "REVISAR": ["REV", "Revisar"],
   "SOLO EN OT": ["REV", "Solo en OT"], "SOLO EN CHARGE SHEET": ["REV", "Solo en Charge Sheet"],
   "SIN PLAN EN CS": ["INF", "Sin plan en CS"], "CS SIN EXPLOSIVO": ["DIF", "CS sin explosivo"],
 };
-const ANILLO = { DIF: "#d2232a", REV: "#e08a00", INF: "#7b8794" };
+const ANILLO = { DIF: "#d2232a", KG: "#e08a00", REV: "#7a3fc2", INF: "#7b8794" };
 const COLS = [
   ["pozo", "Pozo"], ["estado", "Estado"], ["detalle", "Detalle"], ["grupo_OT", "Perfil OT"],
   ["aumento_OT", "Aumento taco"], ["taco_OT", "Taco OT"], ["taco_CS", "Taco CS"],
   ["aire_OT", "Aire OT"], ["aire_CS", "Aire CS"], ["explosivo_OT", "Explosivo OT"], ["explosivo_CS", "Explosivo CS"],
-  ["kgm_OT", "kg/m OT"], ["kgm_CS", "kg/m CS"], ["kg_CS", "kg CS"], ["prof_CS", "Prof. CS"],
+  ["kg_OT_nominal", "kg OT"], ["kg_CS", "kg CS"], ["kgm_OT", "kg/m OT"], ["kgm_CS", "kg/m CS"], ["prof_CS", "Prof. CS"],
 ];
-const NUM = new Set(["aumento_OT", "taco_OT", "taco_CS", "aire_OT", "aire_CS", "kgm_OT", "kgm_CS", "kg_CS", "prof_CS"]);
+const NUM = new Set(["aumento_OT", "taco_OT", "taco_CS", "aire_OT", "aire_CS", "kgm_OT", "kgm_CS", "kg_CS", "kg_OT_nominal", "prof_CS"]);
 const miles = n => n == null || n === "" ? "—" : Number(n).toLocaleString("es-CL", { maximumFractionDigits: 1 });
 const v = (x, u = "") => x == null || x === "" ? "—" : `${x}${u}`;
 
@@ -268,7 +270,10 @@ function pintar(r) {
   const ver = $("veredicto");
   ver.className = "verdict " + (malos === 0 && desvTot === 0 ? "ok" : "bad");
   const partes = [];
-  if (malos) partes.push(`${malos} pozo(s) no coinciden o requieren revisión`);
+  const nDif = (c["DIFERENCIA"] || 0) + (c["CS SIN EXPLOSIVO"] || 0), nKg = c["KG DISTINTO"] || 0, nRev = malos - nDif - nKg;
+  if (nDif) partes.push(`${nDif} pozo(s) con taco, aire o explosivo distinto`);
+  if (nKg) partes.push(`${nKg} pozo(s) con kg de explosivo distinto`);
+  if (nRev) partes.push(`${nRev} pozo(s) a revisar`);
   if (t.ok_pozos === false) partes.push("el número de pozos no coincide");
   if (t.ok_kg === false) partes.push("los kg totales de explosivo no coinciden");
   ver.textContent = partes.length
@@ -292,7 +297,7 @@ function pintar(r) {
     el("td", { class: "num" }, dPozos), el("td", {}, pill(t.ok_pozos))));
   tt.append(el("tr", {}, el("td", {}, "Explosivo total (kg)"), el("td", { class: "num" }, miles(t.kg_OT)),
     el("td", { class: "num" }, miles(t.kg_CS)),
-    el("td", { class: "num" }, t.dif_kg_pct == null ? "—" : `${t.dif_kg_pct > 0 ? "+" : ""}${miles(t.dif_kg_pct)} %`),
+    el("td", { class: "num" }, t.dif_kg == null ? "—" : `${t.dif_kg > 0 ? "+" : ""}${miles(t.dif_kg)} kg (${t.dif_kg_pct > 0 ? "+" : ""}${miles(t.dif_kg_pct)} %)`),
     el("td", {}, pill(t.ok_kg))));
 
   // avisos
@@ -359,7 +364,7 @@ function pintarPlano(r) {
 
   const lg = $("leyenda"); lg.replaceChildren();
   for (const b of r.cuadros) lg.append(el("span", {}, el("span", { class: "sw", style: `background:${b.color}` }), b.nombre));
-  for (const [k, txt] of [["DIF", "Diferencia"], ["REV", "Revisar / solo en un documento"], ["INF", "Sin plan en CS"]])
+  for (const [k, txt] of [["DIF", "Taco, aire o explosivo distinto"], ["KG", "Solo kg distinto"], ["REV", "Revisar / solo en un documento"], ["INF", "Sin plan en CS"]])
     lg.append(el("span", {}, el("span", { class: "ring", style: `border:3px ${k === "INF" ? "dashed" : "solid"} ${ANILLO[k]}` }), txt));
   for (const z of r.plano.zonas.filter((z, i, arr) => arr.findIndex(o => o.color === z.color && o.delta === z.delta) === i))
     lg.append(el("span", {}, el("span", { class: "ring", style: `border:2px solid ${z.color};border-radius:3px` }),
@@ -408,12 +413,12 @@ function mostrarTip(pozo, e) {
   } else {
     const t = el("table");
     t.append(el("tr", {}, el("th", {}, ""), el("th", {}, "OT"), el("th", {}, "Charge Sheet")));
-    const d = f.detalle || "", comp = f.estado === "DIFERENCIA";
+    const d = f.detalle || "", comp = f.estado === "DIFERENCIA" || f.estado === "KG DISTINTO";
     t.append(fila2("Taco", v(f.taco_OT, " m"), v(f.taco_CS, " m"), comp ? /taco OT/.test(d) : undefined));
     t.append(fila2("Taco de aire", v(f.aire_OT, " m"), v(f.aire_CS, " m"), comp ? /aire OT/.test(d) : undefined));
     t.append(fila2("Explosivo", v(f.explosivo_OT), v(f.explosivo_CS)));
-    t.append(fila2("kg/m", v(f.kgm_OT), v(f.kgm_CS), /kg\/m OT/.test(d)));
-    t.append(el("tr", {}, el("th", {}, "Carga"), el("td", {}, v(f.kg_OT_nominal, " kg (nominal)")), el("td", {}, v(f.kg_CS, " kg"))));
+    t.append(fila2("Explosivo (kg)", v(f.kg_OT_nominal, " kg"), v(f.kg_CS, " kg"), /kg OT/.test(d)));
+    t.append(fila2("kg/m (referencia)", v(f.kgm_OT), v(f.kgm_CS), false));
     t.append(el("tr", {}, el("th", {}, "Profundidad"), el("td", {}, "—"), el("td", {}, v(f.prof_CS, " m"))));
     tip.append(t);
     tip.append(el("div", { class: "d" }, `${(ETIQ[f.estado] || ["", f.estado])[1]}${f.detalle ? ": " + f.detalle : ""}`));

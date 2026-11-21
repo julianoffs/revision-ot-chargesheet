@@ -20,10 +20,12 @@ try:
 except ImportError:  # versiones antiguas
     import fitz
 
-TOL_TACO = 0.30   # m
-TOL_AIRE = 0.30   # m (taco intermedio de aire)
-TOL_KGM = 0.05    # 5 % en densidad lineal (kg/m)
-TOL_KG_TOTAL = 0.05   # 5 % en kg totales de explosivo de la malla
+# Sin tolerancias: OT y charge sheet deben indicar exactamente lo mismo.
+# (Las tolerancias de 0,3 m / 5 % son para revisiones post-tronadura, no para esta comparación.)
+TOL_TACO = 0.0        # m
+TOL_AIRE = 0.0        # m (taco intermedio de aire)
+TOL_KG = 0.0          # kg de explosivo por pozo
+TOL_KG_TOTAL = 0.0    # kg totales de explosivo de la malla
 
 HOLE_RE = re.compile(r"^\d{2,4}[A-Z]{0,2}$")
 
@@ -485,13 +487,12 @@ def compare(ot_holes, cs_holes):
                 prob.append(f"aire OT {o['aire']} vs CS {c['aire']}")
             if o["explosivo"] != c["explosivo"]:
                 prob.append(f"explosivo OT {o['explosivo']} vs CS {c['explosivo']}")
-            elif o["largo_carga"] and c["largo_carga"] and o["kg"] and c["kg"]:
-                ko, kc = o["kg"] / o["largo_carga"], c["kg"] / c["largo_carga"]
-                r["kgm_OT"], r["kgm_CS"] = round(ko, 1), round(kc, 1)
-                if abs(ko - kc) / ko > TOL_KGM:
-                    prob.append(f"kg/m OT {ko:.1f} vs CS {kc:.1f}")
+            if o["largo_carga"] and c["largo_carga"] and o["kg"] and c["kg"]:   # kg/m: solo informativo
+                r["kgm_OT"], r["kgm_CS"] = round(o["kg"] / o["largo_carga"], 1), round(c["kg"] / c["largo_carga"], 1)
+            if o["kg"] is not None and c["kg"] is not None and abs(round(o["kg"]) - round(c["kg"])) > TOL_KG:
+                prob.append(f"kg OT {o['kg']:.0f} vs CS {c['kg']:.0f}")
             if prob:
-                r["estado"] = "DIFERENCIA"
+                r["estado"] = "KG DISTINTO" if all(x.startswith("kg OT") for x in prob) else "DIFERENCIA"
                 r["detalle"] = "; ".join(prob)
                 if o.get("zona_sin_leyenda"):
                     r["detalle"] += " (pozo dentro de un polígono de color sin leyenda)"
@@ -528,7 +529,7 @@ def run_pair(ot_path, cs_paths, out_csv=None):
            "pozos_CS_con_plan": sum(1 for h in cs_holes.values() if not h["sin_plan"]),
            "kg_OT": res.get("kg_explosivo"), "kg_CS": kg_cs,
            "kg_CS_hojas": [m_["kg_total_hoja"] for m_ in cs_metas], "dif_kg_pct": None,
-           "ok_pozos": None, "ok_kg": None, "tol_kg_pct": TOL_KG_TOTAL * 100}
+           "ok_pozos": None, "ok_kg": None, "dif_kg": None}
     if tot["pozos_OT_tabla"] is not None:
         tot["ok_pozos"] = tot["pozos_OT_tabla"] == tot["pozos_CS"]
         if not tot["ok_pozos"]:
@@ -541,7 +542,8 @@ def run_pair(ot_path, cs_paths, out_csv=None):
         ot_meta["avisos"].append("No se pudo leer 'N° Pozos Total' en la tabla de la OT.")
     if tot["kg_OT"]:
         tot["dif_kg_pct"] = round((kg_cs - tot["kg_OT"]) / tot["kg_OT"] * 100, 1)
-        tot["ok_kg"] = abs(tot["dif_kg_pct"]) <= TOL_KG_TOTAL * 100
+        tot["dif_kg"] = round(kg_cs - tot["kg_OT"])
+        tot["ok_kg"] = abs(tot["dif_kg"]) <= TOL_KG_TOTAL
         if not tot["ok_kg"]:
             ot_meta["avisos"].insert(0, f"DESVIACIÓN: la OT indica {tot['kg_OT']:,.0f} kg de explosivo y la charge sheet "
                                         f"planifica {kg_cs:,.0f} kg ({tot['dif_kg_pct']:+.1f} %).".replace(",", "."))
@@ -573,8 +575,7 @@ def run_json(ot_path, cs_paths):
              "zonas": [{"pts": [[round(x, 1), round(y, 1)] for x, y in z["pts"]], "delta": z["delta"],
                         "color": hexc(z["color"])} for z in om["poligonos"]]}
     return json.dumps({"totales": om["totales"], "plano": plano,
-                       "tolerancias": {"taco": TOL_TACO, "aire": TOL_AIRE, "kgm_pct": TOL_KGM * 100,
-                                       "kg_total_pct": TOL_KG_TOTAL * 100},
+                       "tolerancias": {"taco": TOL_TACO, "aire": TOL_AIRE, "kg": TOL_KG, "kg_total": TOL_KG_TOTAL},
                        "malla": om["malla"], "pagina_ot": om["pagina"],
                        "charge_sheets": [c["charge_sheet"] for c in cm], "cuadros": cuadros,
                        "zonas_aumento": om["zonas_aumento"], "avisos": avisos, "conteo": cnt,
