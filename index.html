@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisión OT vs Charge Sheet</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --ink: #16202b; --muted: #5b6876; --line: #d9dee4;
+    --accent: #0b5cad; --accent-ink: #ffffff;
+    --ok: #1c7c3c; --ok-bg: #e3f4e8; --bad: #b3261e; --bad-bg: #fbe4e2;
+    --warn: #8a5a00; --warn-bg: #fdf0d0; --info: #3d4f63; --info-bg: #e6ebf1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d; --panel: #1b222b; --ink: #e8edf2; --muted: #9aa7b5; --line: #323d4a;
+      --accent: #5aa7f2; --accent-ink: #0c1218;
+      --ok: #7fd49a; --ok-bg: #173323; --bad: #ff9a92; --bad-bg: #40201e;
+      --warn: #f2c66b; --warn-bg: #3b2f12; --info: #b9c6d4; --info-bg: #27313d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 10px; }
+  p.lead { color: var(--muted); margin: 0 0 20px; max-width: 70ch; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .drop { background: var(--panel); border: 2px dashed var(--line); border-radius: 10px; padding: 18px;
+          cursor: pointer; display: block; min-height: 118px; }
+  .drop.over { border-color: var(--accent); }
+  .drop.ready { border-style: solid; border-color: var(--ok); }
+  .drop b { display: block; font-size: 16px; margin-bottom: 4px; }
+  .drop span { color: var(--muted); font-size: 13px; }
+  .drop .file { display: block; margin-top: 10px; color: var(--ink); font-size: 14px; word-break: break-word; }
+  .drop input { display: none; }
+  .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+  button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+           color: var(--ink); padding: 9px 16px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  #estado { color: var(--muted); font-size: 14px; }
+  .verdict { border-radius: 10px; padding: 14px 16px; font-size: 17px; font-weight: 600; margin-top: 22px; }
+  .verdict.ok { background: var(--ok-bg); color: var(--ok); }
+  .verdict.bad { background: var(--bad-bg); color: var(--bad); }
+  .verdict small { display: block; font-weight: 400; font-size: 14px; margin-top: 3px; }
+  .cards { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 132px; }
+  .card .n { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .card .l { color: var(--muted); font-size: 12.5px; }
+  ul.avisos { margin: 0; padding: 12px 16px 12px 32px; background: var(--warn-bg); color: var(--warn); border-radius: 10px; }
+  .wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 600; font-size: 12.5px; }
+  td.det { white-space: normal; min-width: 260px; }
+  td.num { text-align: right; }
+  .pill { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
+  .pill.OK { background: var(--ok-bg); color: var(--ok); }
+  .pill.DIF { background: var(--bad-bg); color: var(--bad); }
+  .pill.REV { background: var(--warn-bg); color: var(--warn); }
+  .pill.INF { background: var(--info-bg); color: var(--info); }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); vertical-align: -1px; margin-right: 6px; }
+  .filters { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 30px; max-width: 80ch; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Revisión OT de carguío vs Charge Sheet</h1>
+  <p class="lead">Sube la OT de carguío (PDF) y la Charge Sheet de BlastLogic (PDF) de la misma malla.
+    La revisión se hace dentro de tu navegador: los archivos no se envían a ningún servidor.</p>
+
+  <div class="grid">
+    <label class="drop" id="dropOT">
+      <b>1. OT de carguío</b>
+      <span>PDF de la orden de trabajo (con el plano de pozos y los cuadros de perfil).</span>
+      <span class="file" id="fileOT">Haz clic o arrastra el PDF aquí</span>
+      <input type="file" id="inOT" accept="application/pdf,.pdf">
+    </label>
+    <label class="drop" id="dropCS">
+      <b>2. Charge Sheet de BlastLogic</b>
+      <span>PDF generado con "Reprint Sheet". Si la malla tiene más de una hoja, selecciónalas todas.</span>
+      <span class="file" id="fileCS">Haz clic o arrastra el o los PDF aquí</span>
+      <input type="file" id="inCS" accept="application/pdf,.pdf" multiple>
+    </label>
+  </div>
+
+  <div class="bar">
+    <button class="primary" id="btn" disabled>Comparar</button>
+    <span id="estado">Cargando el motor de lectura de PDF (solo la primera vez tarda ~20 s)…</span>
+  </div>
+
+  <section id="res" hidden>
+    <div class="verdict" id="veredicto"></div>
+    <div class="cards" id="tarjetas"></div>
+
+    <div id="avisosBox" hidden>
+      <h2>Avisos para revisión manual</h2>
+      <ul class="avisos" id="avisos"></ul>
+    </div>
+
+    <h2>Perfiles de carga leídos en la OT</h2>
+    <div class="wrap"><table id="tCuadros"></table></div>
+
+    <h2>Detalle pozo a pozo</h2>
+    <div class="filters">
+      <label><input type="checkbox" id="soloDif" checked> Mostrar solo pozos que no coinciden</label>
+      <button id="csv">Descargar CSV completo</button>
+    </div>
+    <div class="wrap"><table id="tFilas"></table></div>
+  </section>
+
+  <footer>
+    Herramienta de apoyo: compara taco, taco de aire, tipo de explosivo y kg/m planificados. Tolerancias: taco y aire ±0,05 m;
+    densidad lineal ±10 %. No reemplaza la revisión del ingeniero: las notas de texto de la OT (por ejemplo "usar taco recomendado")
+    y las tablas de ajuste no se interpretan y se listan como avisos. Las mallas de precorte (‑9xx) no están consideradas.
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.28.3/full/pyodide.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const estado = $("estado"), btn = $("btn");
+let py = null, archivos = { ot: null, cs: [] }, ultimo = null;
+
+const ETIQ = {
+  "OK": ["OK", "Coincide"], "DIFERENCIA": ["DIF", "Diferencia"], "REVISAR": ["REV", "Revisar"],
+  "SOLO EN OT": ["REV", "Solo en OT"], "SOLO EN CHARGE SHEET": ["REV", "Solo en Charge Sheet"],
+  "SIN PLAN EN CS": ["INF", "Sin plan en CS"], "CS SIN EXPLOSIVO": ["DIF", "CS sin explosivo"],
+};
+const COLS = [
+  ["pozo", "Pozo"], ["estado", "Estado"], ["detalle", "Detalle"], ["grupo_OT", "Perfil OT"],
+  ["aumento_OT", "Aumento taco"], ["taco_OT", "Taco OT"], ["taco_CS", "Taco CS"],
+  ["aire_OT", "Aire OT"], ["aire_CS", "Aire CS"], ["explosivo_OT", "Explosivo OT"], ["explosivo_CS", "Explosivo CS"],
+  ["kgm_OT", "kg/m OT"], ["kgm_CS", "kg/m CS"], ["kg_CS", "kg CS"], ["prof_CS", "Prof. CS"],
+];
+const NUM = new Set(["aumento_OT", "taco_OT", "taco_CS", "aire_OT", "aire_CS", "kgm_OT", "kgm_CS", "kg_CS", "prof_CS"]);
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === "class" ? e.className = v : e.setAttribute(k, v);
+  for (const k of kids) e.append(k);
+  return e;
+}
+function refrescar() {
+  $("fileOT").textContent = archivos.ot ? archivos.ot.name : "Haz clic o arrastra el PDF aquí";
+  $("fileCS").textContent = archivos.cs.length ? archivos.cs.map(f => f.name).join(", ") : "Haz clic o arrastra el o los PDF aquí";
+  $("dropOT").classList.toggle("ready", !!archivos.ot);
+  $("dropCS").classList.toggle("ready", archivos.cs.length > 0);
+  btn.disabled = !(py && archivos.ot && archivos.cs.length);
+}
+function soloPdf(lista) { return [...lista].filter(f => /\.pdf$/i.test(f.name)); }
+$("inOT").addEventListener("change", e => { archivos.ot = soloPdf(e.target.files)[0] || null; refrescar(); });
+$("inCS").addEventListener("change", e => { archivos.cs = soloPdf(e.target.files); refrescar(); });
+for (const [id, clave] of [["dropOT", "ot"], ["dropCS", "cs"]]) {
+  const d = $(id);
+  d.addEventListener("dragover", e => { e.preventDefault(); d.classList.add("over"); });
+  d.addEventListener("dragleave", () => d.classList.remove("over"));
+  d.addEventListener("drop", e => {
+    e.preventDefault(); d.classList.remove("over");
+    const fs = soloPdf(e.dataTransfer.files);
+    if (clave === "ot") archivos.ot = fs[0] || null; else archivos.cs = fs;
+    refrescar();
+  });
+}
+
+async function iniciar() {
+  try {
+    py = await loadPyodide();
+    await py.loadPackage("pymupdf");
+    const codigo = await (await fetch("comparador.py", { cache: "no-cache" })).text();
+    py.FS.writeFile("/home/pyodide/comparador.py", codigo);
+    py.runPython("import comparador");
+    estado.textContent = "Listo. Selecciona los dos PDF y presiona Comparar.";
+  } catch (err) {
+    py = null;
+    estado.textContent = "No se pudo cargar el motor de lectura de PDF: " + err.message;
+  }
+  refrescar();
+}
+
+async function comparar() {
+  btn.disabled = true; estado.textContent = "Leyendo los PDF…";
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    py.FS.writeFile("/tmp/ot.pdf", new Uint8Array(await archivos.ot.arrayBuffer()));
+    const rutas = [];
+    for (let i = 0; i < archivos.cs.length; i++) {
+      const r = `/tmp/cs${i}.pdf`;
+      py.FS.writeFile(r, new Uint8Array(await archivos.cs[i].arrayBuffer()));
+      rutas.push(r);
+    }
+    py.globals.set("_rutas", py.toPy(rutas));
+    ultimo = JSON.parse(py.runPython("comparador.run_json('/tmp/ot.pdf', list(_rutas))"));
+    pintar(ultimo);
+    estado.textContent = "Comparación terminada.";
+  } catch (err) {
+    $("res").hidden = true;
+    const m = String(err.message || err).trim().split("\n").pop();
+    estado.textContent = "No se pudo comparar: " + m + " Verifica que el primer archivo sea la OT de carguío y el segundo la Charge Sheet.";
+  }
+  refrescar();
+}
+
+function pintar(r) {
+  const c = r.conteo, total = r.filas.length, ok = c["OK"] || 0;
+  const malos = total - ok - (c["SIN PLAN EN CS"] || 0);
+  const v = $("veredicto");
+  v.className = "verdict " + (malos === 0 ? "ok" : "bad");
+  v.textContent = malos === 0
+    ? `Malla ${r.malla}: no se encontraron diferencias entre la OT y la Charge Sheet.`
+    : `Malla ${r.malla}: ${malos} pozo(s) no coinciden o requieren revisión.`;
+  v.append(el("small", {}, `OT página ${r.pagina_ot} · Charge Sheet ${r.charge_sheets.join(", ")} · ${total} pozos`));
+
+  const t = $("tarjetas"); t.replaceChildren();
+  for (const [k, n] of Object.entries(c).sort((a, b) => b[1] - a[1]))
+    t.append(el("div", { class: "card" }, el("div", { class: "n" }, String(n)), el("div", { class: "l" }, (ETIQ[k] || ["", k])[1])));
+
+  const a = $("avisos"); a.replaceChildren();
+  const zonas = r.zonas_aumento.map(z => `+${z[0]} m a ${z[1]} pozos`).join("; ");
+  const lista = [...r.avisos];
+  if (zonas) lista.unshift("Zonas de aumento de taco aplicadas: " + zonas + ".");
+  for (const x of lista) a.append(el("li", {}, x));
+  $("avisosBox").hidden = lista.length === 0;
+
+  const tc = $("tCuadros"); tc.replaceChildren();
+  tc.append(el("tr", {}, ...["Perfil", "N° pozos", "Largo pozo", "Taco", "Aire", "Explosivo", "kg"].map(h => el("th", {}, h))));
+  for (const b of r.cuadros) {
+    const nom = el("td", {}, el("span", { class: "sw", style: `background:${b.color}` }), b.nombre);
+    tc.append(el("tr", {}, nom, ...[b.n_pozos, b.largo_pozo, b.taco, b.aire, b.explosivo, b.kg]
+      .map((x, i) => el("td", { class: i === 4 ? "" : "num" }, x == null ? "" : String(x)))));
+  }
+  pintarFilas();
+  $("res").hidden = false;
+}
+
+function pintarFilas() {
+  if (!ultimo) return;
+  const solo = $("soloDif").checked, tf = $("tFilas"); tf.replaceChildren();
+  tf.append(el("tr", {}, ...COLS.map(c => el("th", {}, c[1]))));
+  const filas = ultimo.filas.filter(f => !solo || f.estado !== "OK");
+  for (const f of filas) {
+    const tr = el("tr");
+    for (const [k] of COLS) {
+      const val = f[k] == null ? "" : String(f[k]);
+      if (k === "estado") { const e = ETIQ[val] || ["INF", val]; tr.append(el("td", {}, el("span", { class: "pill " + e[0] }, e[1]))); }
+      else tr.append(el("td", { class: k === "detalle" ? "det" : NUM.has(k) ? "num" : "" }, val));
+    }
+    tf.append(tr);
+  }
+  if (!filas.length) tf.append(el("tr", {}, el("td", { colspan: String(COLS.length) }, "Todos los pozos coinciden.")));
+}
+
+function descargarCsv() {
+  if (!ultimo) return;
+  const cols = ultimo.columnas, q = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const txt = [cols.join(";"), ...ultimo.filas.map(f => cols.map(c => q(f[c])).join(";"))].join("\r\n");
+  const a = el("a", { href: URL.createObjectURL(new Blob(["﻿" + txt], { type: "text/csv" })), download: `comparacion_${ultimo.malla}.csv` });
+  document.body.append(a); a.click(); a.remove();
+}
+
+btn.addEventListener("click", comparar);
+$("soloDif").addEventListener("change", pintarFilas);
+$("csv").addEventListener("click", descargarCsv);
+iniciar();
+</script>
+</body>
+</html>
