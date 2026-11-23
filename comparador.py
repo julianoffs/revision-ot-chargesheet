@@ -28,11 +28,34 @@ TOL_AIRE = 0.0        # m (taco intermedio de aire)
 HOLE_RE = re.compile(r"^\d{2,4}[A-Z]{0,2}$")
 
 
-def num(s):
+def num(s, dec=None):
+    """Texto -> número, con coma o punto decimal.
+
+    dec: separador decimal del documento ("," o "."), si se conoce. Si no se
+    conoce se deduce del propio texto: con ambos separadores el último es el
+    decimal; con uno solo, es de miles si se repite o si le siguen exactamente
+    3 dígitos ("137,803" / "11.150"), y decimal en otro caso ("6,5" / "6.5").
+    """
+    t = re.sub(r"[^\d.,\-]", "", str(s))
+    if dec is None:
+        if "," in t and "." in t:
+            dec = "," if t.rfind(",") > t.rfind(".") else "."
+        else:
+            sep = "," if "," in t else "."
+            miles = t.count(sep) > 1 or re.search(r"\d[.,]\d{3}$", t)
+            dec = ("." if sep == "," else ",") if miles else sep
+    t = t.replace("." if dec == "," else ",", "").replace(",", ".")
     try:
-        return float(str(s).replace(",", "").replace("kg", "").replace("m", "").replace("°", ""))
+        return float(t)
     except ValueError:
         return None
+
+
+def sep_decimal(texto):
+    """Separador decimal de un documento, según sus largos en metros ("6,0m" / "6.0m")."""
+    comas = len(re.findall(r"\d,\d{1,2}m(?![\w³])", texto))
+    puntos = len(re.findall(r"\d\.\d{1,2}m(?![\w³])", texto))
+    return "," if comas > puntos else "."
 
 
 def norm_prod(s):
@@ -71,7 +94,11 @@ def parse_charge_sheet(path):
     meta["pozos_hoja"] = int(m.group(1)) if m else None
     m = re.search(r"Holes charged:\s*(\d+)", t0)
     meta["pozos_cargados"] = int(m.group(1)) if m else None
-    m = re.search(r"Total bulk explosives\s+(\d+)\s+[\d.,]+m\s+([\d,]+)kg", t0)
+    dec = sep_decimal("\n".join(pg.get_text() for pg in doc))
+    meta["sep_decimal"] = dec
+    _num = globals()["num"]
+    num = lambda s: _num(s, dec)             # noqa: E731  (todo el documento usa el mismo separador)
+    m = re.search(r"Total bulk explosives\s+(\d+)\s+[\d.,]+m\s+([\d.,]+)kg", t0)
     meta["kg_total_hoja"] = num(m.group(2)) if m else None
     cur = None
     for pg in doc:
@@ -84,7 +111,7 @@ def parse_charge_sheet(path):
         data = sorted((w for w in words if w[1] >= y0), key=lambda w: (w[1], w[0]))
         rows, cur_y = [], None
         for w in data:                       # agrupa palabras en filas por cercanía vertical
-            if cur_y is None or w[1] - cur_y > 4:
+            if cur_y is None or w[1] - cur_y > 6:   # filas cada ~12 pt; la última de la página viene desfasada ~4 pt
                 rows.append([])
                 cur_y = w[1]
             rows[-1].append(w)
