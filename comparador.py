@@ -8,6 +8,7 @@ etiqueta; el color lo asocia al cuadro de perfil de carga con borde del mismo co
 los polígonos "AUMENTAR TACO x m" suman taco a los pozos que encierran.
 """
 import csv
+import difflib
 import glob
 import math
 import os
@@ -200,22 +201,186 @@ def _inside(pt, poly):
     return c
 
 
-def _parse_box(pg, rect):
-    """Lee un cuadro de perfil de carga -> dict con taco, aire, explosivo, kg..."""
-    spans = []
-    for b in pg.get_text("dict", clip=rect)["blocks"]:
-        for ln in b.get("lines", []):
-            for sp in ln["spans"]:
-                if sp["text"].strip():
-                    spans.append(sp)
-    if not spans:
+# ------------------------------------------------ cuadros pegados como dibujo
+# Cuando el cuadro de perfil viene como dibujo, cada letra es una figura rellena.
+# Se reconoce cada figura comparando su forma con la de las letras de Helvetica
+# (prácticamente igual a la Arial que usa Excel), se arman las líneas de texto y
+# se interpretan igual que un cuadro normal.
+_GW, _GH = 10, 14
+_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()/"
+_TPL = None
+_ETIQUETAS = ["Longitud Pozo (m)", "1er Taco", "2do Taco Intermedio", "Tipo Taco", "Longitud Taco (m)",
+              "Longitud Taco Intermedio (m)", "Carga Explosivo Intermedia", "Carga Explosivo Fondo",
+              "Tipo Explosivo", "Longitud Carga (m)", "Kilogramos Explosivo"]
+_TITULO = ["Pozos", "Producción", "Perimetrales", "Perimetral", "Buffer", "Precorte", "Contorno", "Parte", "Amortiguado"]
+_PRODUCTOS = ["Gravilla", "Aire", "Pirex", "Densiex", "Detrito", "Anfo", "Emulsion", "Blendex", "Emultex"]
+
+
+def _firma(samples, stride, x0, y0, x1, y1):
+    """Figura (zona de una imagen en grises) -> (bits de una grilla _GW x _GH, ancho/alto)."""
+    w, h = x1 - x0, y1 - y0
+    bits = 0
+    for j in range(_GH):
+        ya, yb = y0 + j * h // _GH, max(y0 + (j + 1) * h // _GH, y0 + j * h // _GH + 1)
+        for i in range(_GW):
+            xa, xb = x0 + i * w // _GW, max(x0 + (i + 1) * w // _GW, x0 + i * w // _GW + 1)
+            tot = 0
+            for y in range(ya, yb):
+                tot += sum(samples[y * stride + xa:y * stride + xb])
+            bits = (bits << 1) | (tot < 128 * (yb - ya) * (xb - xa))
+    return bits, w / max(h, 1)
+
+
+def _tinta(samples, stride, w, h):
+    xs = [x for y in range(h) for x in range(w) if samples[y * stride + x] < 128]
+    ys = [y for y in range(h) if any(v < 128 for v in samples[y * stride:y * stride + w])]
+    return (min(xs), min(ys), max(xs) + 1, max(ys) + 1) if xs else None
+
+
+def _plantillas():
+    global _TPL
+    if _TPL is None:
+        _TPL = []
+        doc = fitz.open()
+        for font in ("helv", "hebo"):
+            for ch in _CHARS:
+                pg = doc.new_page(width=80, height=90)
+                pg.insert_text((15, 65), ch, fontname=font, fontsize=60)
+                pix = pg.get_pixmap(colorspace=fitz.csGRAY, alpha=False)
+                bb = _tinta(pix.samples, pix.stride, pix.width, pix.height)
+                if bb:
+                    bits, asp = _firma(pix.samples, pix.stride, *bb)
+                    _TPL.append((ch, bits, asp, (bb[3] - bb[1]) / 60.0))
+    return _TPL
+
+
+def _parecido(a, b):
+    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+
+def _lineas_dibujo(pg, rect, drawings):
+    """Reconstruye las líneas de texto de un cuadro cuyas letras son figuras rellenas."""
+    dentro = [g for g in drawings if rect.contains(g["rect"])]
+    # el gráfico de barras queda a la derecha de las celdas de color de la tabla
+    celdas = [g["rect"] for g in dentro if g.get("fill") and all(it[0] == "re" for it in g["items"])
+              and min(g["fill"]) > 0.75 and max(g["fill"]) - min(g["fill"]) > 0.04 and g["rect"].width > 20]
+    x_tabla = max((c.x1 for c in celdas), default=rect.x1)
+    y_tabla = min((c.y0 for c in celdas), default=rect.y0)
+    gl = []
+    for g in dentro:
+        r = g["rect"]
+        if not g.get("fill") or max(g["fill"]) > 0.35 or r.width > 14 or r.height > 14 or r.height < 0.4:
+            continue
+        if all(it[0] == "re" for it in g["items"]) and len(g["items"]) == 1 and (r.width > 3 or r.height > 3):
+            continue                                   # bordes de celda
+        gl.append(r)
+    if len(gl) < 30:
         return None
-    med = statistics.median(sp["size"] for sp in spans)
-    spans = [sp for sp in spans if sp["size"] >= 0.8 * med]   # descarta el gráfico de barras
-    rows = {}
-    for sp in spans:
-        rows.setdefault(round(sp["bbox"][1] / (med * 0.6)), []).append(sp)
-    lines = [" ".join(s["text"].strip() for s in sorted(rows[k], key=lambda s: s["bbox"][0])) for k in sorted(rows)]
+    H = sorted(r.height for r in gl)[int(len(gl) * 0.8)]          # alto de mayúsculas y dígitos
+    gl = [r for r in gl if not (r.x0 > x_tabla - 1 and r.y0 > y_tabla + H)]      # fuera el gráfico
+    Z = 8.0
+    pix = pg.get_pixmap(matrix=fitz.Matrix(Z, Z), clip=rect, colorspace=fitz.csGRAY, alpha=False)
+    S, st = pix.samples, pix.stride
+    ox, oy = pix.x, pix.y
+    tpl = _plantillas()
+    # líneas por la base de las letras
+    gl.sort(key=lambda r: r.y1)
+    filas = []
+    for r in gl:
+        if filas and r.y1 - filas[-1][-1].y1 < 0.45 * H and r.y1 - filas[-1][0].y1 < 0.9 * H:
+            filas[-1].append(r)
+        else:
+            filas.append([r])
+    lineas = []
+    for fila in filas:
+        fila.sort(key=lambda r: r.x0)
+        grandes = [r for r in fila if r.height > 0.6 * H]
+        if not grandes:
+            continue
+        base = statistics.median(r.y1 for r in grandes)
+        toks, cur, prev = [], [], None
+        for r in fila:
+            if prev is not None and r.x0 - prev.x1 > 0.45 * H:
+                toks.append(cur)
+                cur = []
+            # signos pequeños por geometría
+            if r.height < 0.45 * H and r.width < 0.35 * H:
+                ch = "'" if r.y1 < base - 0.4 * H else ("," if r.height > 0.22 * H else ".")
+                cur.append((r, ch, ch, True))
+            elif r.height < 0.25 * H and r.width > 1.3 * r.height:
+                cur.append((r, "-", "-", True))
+            else:
+                x0, y0 = max(0, int(r.x0 * Z) - ox), max(0, int(r.y0 * Z) - oy)
+                x1, y1 = min(pix.width, int(r.x1 * Z + 0.999) - ox), min(pix.height, int(r.y1 * Z + 0.999) - oy)
+                bits, asp = _firma(S, st, x0, y0, x1, y1)
+                rel = r.height / H
+                best = bestd = None
+                for ch, tb, ta, th in tpl:
+                    d = bin(bits ^ tb).count("1") / (_GW * _GH) + 0.5 * abs(math.log(asp / ta)) \
+                        + 0.5 * abs(rel - th / tpl[0][3])
+                    if best is None or d < best[0]:
+                        best = (d, ch)
+                    if ch.isdigit() and (bestd is None or d < bestd[0]):
+                        bestd = (d, ch)
+                cur.append((r, best[1], bestd[1], bestd[0] <= best[0] + 0.06))
+            prev = r
+        toks.append(cur)
+        # cada palabra: número si todas sus figuras calzan con dígitos
+        palabras = []
+        for t in toks:
+            if not t:
+                continue
+            numerica = all(g[3] for g in t) and any(g[2].isdigit() for g in t)
+            palabras.append({"x0": t[0][0].x0, "x1": t[-1][0].x1, "num": numerica,
+                             "t": "".join(g[2] if numerica else g[1] for g in t)})
+        lineas.append(palabras)
+    # etiqueta (izquierda) y valor (columna derecha) -> texto normalizado
+    out = []
+    for i, pal in enumerate(lineas):
+        corte = next((k for k in range(1, len(pal)) if pal[k]["x0"] - pal[k - 1]["x1"] > 2.5 * H), len(pal))
+        etq = " ".join(p["t"] for p in pal[:corte])
+        val = pal[corte:]
+        if i == 0 or not out:                               # título: nombre + números finales
+            fin = [p["t"] for p in val if p["num"]]
+            etq = re.sub(r"(\d/\d)\S*$", r"\1", etq.rstrip("'"))
+            etq = re.sub(r"(?<=[A-Za-z])(?=\d)", " ", etq)
+            pals = []
+            for w in etq.split():
+                c = max(_TITULO, key=lambda e: _parecido(e, w))
+                pals.append(c if w.isalpha() and len(w) > 3 and _parecido(c, w) >= 0.75 else w)
+            out.append(" ".join(pals) + '" ' + " ".join(fin))
+            continue
+        cand = max(_ETIQUETAS, key=lambda e: _parecido(re.sub(r"[^A-Za-z0-9]", "", e), re.sub(r"[^A-Za-z0-9]", "", etq)))
+        if _parecido(re.sub(r"[^A-Za-z0-9]", "", cand), re.sub(r"[^A-Za-z0-9]", "", etq)) >= 0.6:
+            etq = cand
+        vtxt = []
+        for p in val:
+            if p["num"] or p["t"] == "-":
+                vtxt.append(p["t"])
+            else:
+                pr = max(_PRODUCTOS, key=lambda e: _parecido(e, p["t"]))
+                vtxt.append(pr if _parecido(pr, p["t"]) >= 0.6 else p["t"])
+        out.append((etq + " " + " ".join(vtxt)).strip())
+    return out
+
+
+def _parse_box(pg, rect, lines=None):
+    """Lee un cuadro de perfil de carga -> dict con taco, aire, explosivo, kg..."""
+    if lines is None:
+        spans = []
+        for b in pg.get_text("dict", clip=rect)["blocks"]:
+            for ln in b.get("lines", []):
+                for sp in ln["spans"]:
+                    if sp["text"].strip():
+                        spans.append(sp)
+        if not spans:
+            return None
+        med = statistics.median(sp["size"] for sp in spans)
+        spans = [sp for sp in spans if sp["size"] >= 0.8 * med]   # descarta el gráfico de barras
+        rows = {}
+        for sp in spans:
+            rows.setdefault(round(sp["bbox"][1] / (med * 0.6)), []).append(sp)
+        lines = [" ".join(s["text"].strip() for s in sorted(rows[k], key=lambda s: s["bbox"][0])) for k in sorted(rows)]
     box = {"titulo": "", "largo_pozo": None, "taco": None, "taco_tipo": "", "aire": 0.0,
            "expl_fondo": "", "largo_fondo": None, "kg_fondo": None,
            "expl_inter": "", "largo_inter": None, "kg_inter": None, "n_pozos": None, "texto": lines}
@@ -332,7 +497,20 @@ def parse_ot(path):
             if "Longitud Taco" not in pg.get_text(clip=r):
                 # cuadro pegado como dibujo: las letras son curvas, no texto, y no se pueden leer
                 if not pg.get_text(clip=r).strip() and sum(1 for q in drawings if r.contains(q["rect"])) > 100:
-                    ilegibles.append(r)
+                    info = None
+                    try:
+                        lineas = _lineas_dibujo(pg, r, drawings)
+                        info = _parse_box(pg, r, lineas) if lineas else None
+                    except Exception:
+                        info = None
+                    if info and info["taco"] is not None and info["largo_pozo"] is not None:
+                        suma = info["taco"] + (info["aire"] or 0) + (info["largo_inter"] or 0) + (info["largo_fondo"] or 0)
+                        info["dibujo"] = True
+                        info["dibujo_ok"] = abs(suma - info["largo_pozo"]) < 0.06
+                        info["nombre"] = f"{len(boxes) + 1}. {info['titulo'] or 'Cuadro sin título'} (leído desde dibujo)"
+                        boxes.append({"rect": r, "color": tuple(g["color"]), **info})
+                    else:
+                        ilegibles.append(r)
                 continue
             info = _parse_box(pg, r)
             if info:
@@ -345,6 +523,17 @@ def parse_ot(path):
             f"PROBLEMA EN LA OT: {len(ilegibles)} cuadro(s) de perfil están pegados como dibujo (las letras son "
             f"curvas, no texto) y no se pueden leer. Los pozos de esos cuadros quedan como 'Revisar'. Solución: "
             f"generar el PDF de la OT con los cuadros como texto, igual que el resto de la hoja.")
+    dib = [b for b in boxes if b.get("dibujo")]
+    if dib:
+        meta["avisos"].append(
+            f"{len(dib)} cuadro(s) de perfil de la OT están pegados como dibujo (sin texto); sus valores se "
+            f"leyeron reconociendo la forma de los números. Verificar en la tabla 'Perfiles de carga' que "
+            f"coincidan con la OT.")
+        for b in dib:
+            if not b["dibujo_ok"]:
+                meta["avisos"].append(
+                    f"REVISAR LECTURA: en el cuadro '{b['nombre']}' el largo de pozo leído ({b['largo_pozo']} m) no "
+                    f"calza con taco + aire + carga; puede haber un número mal leído.")
     # respaldo: cuadros sin borde detectable -> se localizan por el título "Pozos ..."
     if not boxes:
         meta["avisos"].append("No se detectaron bordes de color en los cuadros de perfil; revisar manualmente.")
