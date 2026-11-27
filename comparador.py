@@ -322,7 +322,7 @@ def parse_ot(path):
     meta["pagina_wh"] = (pg.rect.width, pg.rect.height)
 
     # 1) cuadros de perfil: rectángulos grandes de borde grueso y color
-    boxes = []
+    boxes, ilegibles = [], []
     for g in drawings:
         r = g["rect"]
         if g.get("color") and (g.get("width") or 0) >= 2.0 and r.width > 0.12 * W and r.height > 0.1 * pg.rect.height \
@@ -330,11 +330,21 @@ def parse_ot(path):
             if any(abs(r.x0 - b["rect"].x0) < 3 and abs(r.y0 - b["rect"].y0) < 3 for b in boxes):
                 continue
             if "Longitud Taco" not in pg.get_text(clip=r):
+                # cuadro pegado como dibujo: las letras son curvas, no texto, y no se pueden leer
+                if not pg.get_text(clip=r).strip() and sum(1 for q in drawings if r.contains(q["rect"])) > 100:
+                    ilegibles.append(r)
                 continue
             info = _parse_box(pg, r)
             if info:
                 info["nombre"] = f"{len(boxes) + 1}. {info['titulo'] or 'Cuadro sin título'}"
                 boxes.append({"rect": r, "color": tuple(g["color"]), **info})
+    ilegibles = [r for i, r in enumerate(ilegibles)
+                 if not any(abs(r.x0 - q.x0) < 3 and abs(r.y0 - q.y0) < 3 for q in ilegibles[:i])]
+    if ilegibles:
+        meta["avisos"].append(
+            f"PROBLEMA EN LA OT: {len(ilegibles)} cuadro(s) de perfil están pegados como dibujo (las letras son "
+            f"curvas, no texto) y no se pueden leer. Los pozos de esos cuadros quedan como 'Revisar'. Solución: "
+            f"generar el PDF de la OT con los cuadros como texto, igual que el resto de la hoja.")
     # respaldo: cuadros sin borde detectable -> se localizan por el título "Pozos ..."
     if not boxes:
         meta["avisos"].append("No se detectaron bordes de color en los cuadros de perfil; revisar manualmente.")
@@ -391,7 +401,7 @@ def parse_ot(path):
         meta["avisos"].append("Nota en la OT: '" + mm.group(1).strip() + "' (revisar manualmente)")
 
     # 3) pozos = puntos pequeños rellenos; etiqueta = texto numérico más cercano
-    excl = [b["rect"] for b in boxes] + [L["rect"] for L in legend]
+    excl = [b["rect"] for b in boxes] + [L["rect"] for L in legend] + ilegibles
     dots = []
     for g in drawings:
         r = g["rect"]
